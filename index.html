@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Calculadora de Contribuciones de Grupos Funcionales</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        h1 {
+            text-align: center;
+        }
+        .container {
+            max-width: 600px;
+            margin: auto;
+        }
+        .group-selection, .group-list, .result {
+            margin-bottom: 20px;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            background-color: #f9f9f9;
+        }
+        .group-selection label {
+            font-weight: bold;
+        }
+        .group-selection select {
+            width: 100%;
+            padding: 10px;
+            margin: 5px 0;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+        .group-selection button {
+            padding: 10px;
+            margin: 5px 0;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            background-color: #007bff;
+            color: white;
+            cursor: pointer;
+        }
+        .group-list table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .group-list th, .group-list td {
+            border: 1px solid #ccc;
+            padding: 8px;
+            text-align: left;
+        }
+        .result {
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Calcula el Cp de un Gas Ideal por Joback (J/mol*K)</h1>
+        <div class="group-selection">
+            <label for="category">Seleccione una categoría general:</label>
+            <select id="category">
+                <option value="">--Seleccione una categoría--</option>
+            </select>
+            <label for="subgroup">Seleccione el subgrupo:</label>
+            <select id="subgroup">
+                <option value="">--Seleccione un subgrupo--</option>
+            </select>
+            <label for="group">Seleccione el grupo:</label>
+            <select id="group">
+                <option value="">--Seleccione un grupo--</option>
+            </select>
+            <button onclick="addGroup()">Agregar grupo</button>
+            <button onclick="calculate()">Calcular</button>
+            <button onclick="resetForm()">Reiniciar</button>
+        </div>
+        <div class="group-list">
+            <h2>Grupos agregados:</h2>
+            <table id="groupTable">
+                <thead>
+                    <tr>
+                        <th>Grupo</th>
+                        <th>Cantidad</th>
+                        <th>Eliminar</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- Aquí se agregarán los grupos funcionales y sus cantidades -->
+                </tbody>
+            </table>
+        </div>
+        <div class="result">
+            <h2>Resultado:</h2>
+            <p id="result"></p>
+            <div id="integrationSection" style="display: none;">
+                <label for="T1">T1(K):</label>
+                <input type="number" id="T1" step="0.1">
+                <label for="T2">T2(K):</label>
+                <input type="number" id="T2" step="0.1">
+                <button onclick="integrate()">Integrar</button>
+                <p id="integralResult"></p>
+            </div>
+        </div>
+    </div>
+    <script>
+        const categories = {
+            'hidrocarburos': {
+                'sin anillo': ['-CH3', '>CH2', '>CH-', '>C<', '=CH2', '=CH-', '=C<', '=C=', '≡CH', '≡C-'],
+                'con anillo': ['ring-CH2-', 'ring>CH-', 'ring>C<', 'ring=CH-', 'ring-C<']
+            },
+            'halógenos': {
+                'todos': ['-F', '-Cl', '-Br', '-I']
+            },
+            'oxigenados': {
+                'alcohol': ['alc-OH'],
+                'fenol': ['phe-OH'],
+                'otros': ['-O-', 'ring-O-', '>C=O', 'ring>C=O', 'O=CH', '-COOH', '-COO-']
+            },
+            'nitrogenados': {
+                'sin anillo': ['-NH2', '>NH', '>N-', '-N=',  '=NH', '-CN', '-N02'],
+                'con anillo': ['ring>NH', 'ring-NH=']
+            },
+            'sulfuros': {
+                'sin anillo': ['-SH', '-S-'],
+                'con anillo': ['ring-S-']
+            }
+        };
+
+        const groupContributions = {
+            '-CH3': [1.95e+1, -8.08e-3, 1.53e-4, -9.67e-8],
+            '>CH2': [-9.09e-1, 9.5e-2, -5.44e-5, 1.19e-8],
+            '>CH-': [-2.3e+1, 2.04e-1, -2.65e-4, 1.20e-7],
+            '>C<': [-6.62e+1, 4.27e-1, -6.41e-4, 3.01e-7],
+            '=CH2': [2.36e+1, -3.81e-2, 1.72e-4, -1.03e-7],
+            '=CH-': [-8, 1.05e-1, -9.63e-5, 3.56e-8],
+            '=C<': [-2.81e+1, 2.08e-1, -3.06e-4, 1.46e-7],
+            '=C=': [2.74e+1, -5.57e-2, 1.01e-4, -5.02e-8],
+            '≡CH': [2.45e+1, -2.71e-2, 1.11e-4, -6.78e-8],
+            '≡C-': [7.87, 2.01e-2, -8.33e-6, 1.39e-9],
+
+            'ring-CH2-': [-6.03, 8.54e-2, -8e-6, -1.8e-8],
+            'ring>CH-': [-2.05e+1, 1.62e-1, -1.6e-4, 6.24e-8],
+            'ring>C<': [-9.09e+1, 5.57e-1, -9e-4, 4.69e-7],
+            'ring=CH-': [-2.14, 5.74e-2, -1.64e-6, -1.59e-8],
+            'ring-C<': [-8.25, 1.01e-1, -1.42e-4, 6.78e-8],
+
+            '-F': [2.65e+1, -9.13e-2, 1.91e-4, -1.03e-7],
+            '-Cl': [3.33e+1, -9.63e-2, 1.87e-4, -9.96e-8],
+            '-Br': [2.86e+1, -6.49e-2, 1.36e-4, -7.45e-8],
+            '-I': [3.21e+1, -6.41e-2, 1.26e-4, -6.87e-8],
+
+            'alc-OH': [2.57e+1, -6.91e-2, 1.77e-4, -9.88e-8],
+            'phe-OH': [-2.81, 1.11e-1, -1.16e-4, 4.94e-8],
+            '-O-': [2.55e+1, -6.32e-2, 1.11e-4, -5.48e-8],
+            'ring-O-': [1.22e+1, -1.26e-2, 6.03e-5, -3.86e-8],
+            '>C=O': [6.45, 6.7e-2, -3.57e-5, 2.86e-9],
+            'ring>C=O': [3.04e+1, -8.29e-2, 2.36e-4, -1.31e-7],
+            'O=CH-': [3.09e+1, -3.36e-2, 1.6e-4, -9.88e-8],
+            '-COOH': [2.41e+1, 4.27e-2, 8.04e-5, -6.87e-8],
+            '-COO-': [2.45e+1, 4.02e-2, 4.02e-5, -4.52e-8],
+            '=O': [6.82, 1.96e-2, 1.27e-5, -1.78e-8],
+
+            '-NH2': [2.69e+1, -4.12e-2, 1.64e-4, -9.76e-8],
+            '>NH': [-1.21, 7.62e-2, -4.86e-5, 1.05e-8],
+            '>N-': [-3.11e+1, 2.27e-1, -3.20e-4, 1.46e-7],
+            '=NH': [5.69, -4.12e-3, 1.28e-4, -8.88e-8],
+            '-CN': [3.65E+1, -7.33e-2, 1.84e-4, -1.03e-7],
+            '-N02': [2.59E+1, -3.74e-3, 1.29e-4, -8.88e-8],
+            'ring>NH': [1.18e+1, -2.3e-2, 1.07e-4, -6.28e-8],
+            'ring-NH=': [8.83, -3.84e-3, 4.35e-5, -2.6e-8],
+
+            '-SH': [3.53E+1, -7.58e-2, 1.85e-4, -1.03e-7],
+            '-S-': [1.96E+1, -5.61e-2, 4.02e-5, -2.76e-8],
+            'ring-S-': [1.67E+1, 4.81e-3, 2.77e-5, -2.11e-8]
+        };
+
+        window.onload = function () {
+            const categorySelect = document.getElementById('category');
+            Object.keys(categories).forEach(category => {
+                const option = document.createElement('option');
+                option.value = category;
+                option.textContent = category;
+                categorySelect.appendChild(option);
+            });
+
+            categorySelect.onchange = updateSubgroups;
+            document.getElementById('subgroup').onchange = updateGroups;
+        };
+
+        function updateSubgroups() {
+            const categorySelect = document.getElementById('category');
+            const subgroupSelect = document.getElementById('subgroup');
+            subgroupSelect.innerHTML = '<option value="">--Seleccione un subgrupo--</option>';
+
+            if (categorySelect.value) {
+                const subgroups = Object.keys(categories[categorySelect.value]);
+                subgroups.forEach(subgroup => {
+                    const option = document.createElement('option');
+                    option.value = subgroup;
+                    option.textContent = subgroup;
+                    subgroupSelect.appendChild(option);
+                });
+            }
+        }
+
+        function updateGroups() {
+            const categorySelect = document.getElementById('category');
+            const subgroupSelect = document.getElementById('subgroup');
+            const groupSelect = document.getElementById('group');
+            groupSelect.innerHTML = '<option value="">--Seleccione un grupo--</option>';
+
+            if (categorySelect.value && subgroupSelect.value) {
+                const groups = categories[categorySelect.value][subgroupSelect.value];
+                groups.forEach(group => {
+                    const option = document.createElement('option');
+                    option.value = group;
+                    option.textContent = group;
+                    groupSelect.appendChild(option);
+                });
+            }
+        }
+
+        function addGroup() {
+  const groupSelect = document.getElementById('group');
+  const selectedGroup = groupSelect.value;
+  if (selectedGroup) {
+    const tableBody = document.querySelector('#groupTable tbody');
+    const existingRow = Array.from(tableBody.children).find(row => row.dataset.group === selectedGroup);
+    if (existingRow) {
+      const quantityInput = existingRow.querySelector('.group-quantity');
+      quantityInput.value = parseInt(quantityInput.value) + 1;
+      updateQuantity(quantityInput);
+    } else {
+      const newRow = document.createElement('tr');
+      newRow.dataset.group = selectedGroup;
+      newRow.innerHTML = `
+        <td>${selectedGroup}</td>
+        <td>
+          <input type="number" value="1" min="1" step="1" pattern="[0-9]+" class="group-quantity" onchange="updateQuantity(this); checkInteger(this)">
+        </td>
+        <td><button onclick="removeGroup(this)">Eliminar</button></td>
+      `;
+      tableBody.appendChild(newRow);
+    }
+  }
+}
+
+function checkInteger(input) {
+  const value = input.value;
+  if (value.includes('.')) {
+    input.value = Math.floor(value);
+  }
+}
+
+        function updateQuantity(input) {
+            const quantity = parseInt(input.value);
+            if (quantity < 1) {
+                input.value = 1;
+            }
+        }
+
+        function removeGroup(button) {
+            const row = button.closest('tr');
+            row.remove();
+        }
+
+        function calculate() {
+    const tableBody = document.querySelector('#groupTable tbody');
+    const rows = Array.from(tableBody.children);
+    if (rows.length === 0) {
+        document.getElementById('result').textContent = 'Por favor, agregue al menos un grupo funcional.';
+        return;
+    }
+    let coefficients = [0, 0, 0, 0];
+    rows.forEach(row => {
+        const group = row.dataset.group;
+        const quantity = parseInt(row.querySelector('.group-quantity').value);
+        const contribution = groupContributions[group];
+        coefficients = coefficients.map((coef, index) => coef + contribution[index] * quantity);
+    });
+    // Ajustar coeficientes con las constantes
+    coefficients[0] += -37.93;
+    coefficients[1] += 0.21;
+    coefficients[2] += -0.000391;
+    coefficients[3] += 0.000000206;
+    const polynomial = `${coefficients[0].toFixed(2)} ${coefficients[1] >= 0 ? '+' : ''}${coefficients[1].toExponential(2)}T ${coefficients[2] >= 0 ? '+' : ''}${coefficients[2].toExponential(2)}T^2 ${coefficients[3] >= 0 ? '+' : ''}${coefficients[3].toExponential(2)}T^3`;
+    document.getElementById('result').textContent = `Ecuación Polinómica: Cp = ${polynomial} J/mol*K`;
+    document.getElementById('integrationSection').style.display = 'block';
+
+            document.getElementById('result').textContent = `Ecuación Polinómica: Cp = ${polynomial} J/mol*K`;
+
+            document.getElementById('integrationSection').style.display = 'block';
+            document.getElementById('result').textContent = `Ecuación Polinómica: Cp = ${polynomial} J/mol*K`;
+    document.getElementById('result').insertAdjacentHTML('beforeend', '<p style="color: red; font-size: 12px;">**Advertencia: El Cp calculado es para un gas ideal**</p>');
+        }
+        
+
+        function resetForm() {
+            document.getElementById('category').value = '';
+            document.getElementById('subgroup').innerHTML = '<option value="">--Seleccione un subgrupo--</option>';
+            document.getElementById('group').innerHTML = '<option value="">--Seleccione un grupo--</option>';
+            document.querySelector('#groupTable tbody').innerHTML = '';
+            document.getElementById('result').textContent = '';
+            document.getElementById('integrationSection').style.display = 'none';
+            document.getElementById('integralResult').textContent = '';
+        }
+
+        function integrate() {
+    const T1 = parseFloat(document.getElementById('T1').value);
+    const T2 = parseFloat(document.getElementById('T2').value);
+    if (isNaN(T1) || isNaN(T2)) {
+        document.getElementById('integralResult').textContent = 'Por favor, ingrese valores válidos para T1 y T2.';
+        return;
+    }
+    const tableBody = document.querySelector('#groupTable tbody');
+    const rows = Array.from(tableBody.children);
+    let coefficients = [0, 0, 0, 0];
+    rows.forEach(row => {
+        const group = row.dataset.group;
+        const quantity = parseInt(row.querySelector('.group-quantity').value);
+        const contribution = groupContributions[group];
+        // Sumar las contribuciones de cada grupo a los coeficientes
+        coefficients[0] += contribution[0] * quantity;
+        coefficients[1] += contribution[1] * quantity;
+        coefficients[2] += contribution[2] * quantity;
+        coefficients[3] += contribution[3] * quantity;
+    });
+    // Integrar los coeficientes con los valores de la polinomica
+    coefficients[0] += -37.93;
+    coefficients[1] += 0.21;
+    coefficients[2] += -0.000391;
+    coefficients[3] += 0.000000206;
+    const CpIntegral = (coefficients[0] * (T2 - T1)) + 
+                       (coefficients[1] / 2 * (Math.pow(T2, 2) - Math.pow(T1, 2))) + 
+                       (coefficients[2] / 3 * (Math.pow(T2, 3) - Math.pow(T1, 3))) + 
+                       (coefficients[3] / 4 * (Math.pow(T2, 4) - Math.pow(T1, 4)));
+    document.getElementById('integralResult').textContent = `Integración de Cp de ${T1}K a ${T2}K: ${CpIntegral.toFixed(2)} J/mol`;
+}
+    </script>
+</body>
+</html>
